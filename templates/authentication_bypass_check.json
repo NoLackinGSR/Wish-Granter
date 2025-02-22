@@ -1,0 +1,7 @@
+{
+    "name": "Authentication Bypass Check",
+    "description": "Authentication bypass vulnerability analysis:\n1. Authentication mechanism review\n2. Token/session analysis\n3. Access control verification\n4. Authentication flow testing\n5. Bypass technique identification",
+    "prompt_format": "Analyze this HTTP interaction for authentication bypass vulnerabilities.\n\nFocus on:\n1. Authentication tokens and their implementation\n2. Session management mechanisms\n3. Access control headers and parameters\n4. Authentication flow weaknesses\n\nFormat your response as:\n1. AUTHENTICATION MECHANISM\n[Describe the current implementation]\n\n2. WEAKNESSES FOUND\n[List specific weaknesses with evidence]\n\n3. POTENTIAL BYPASSES\n[Detail possible bypass methods]\n\n4. RECOMMENDATIONS\n[Specific security improvements]",
+    "category": "security",
+    "version": "1.0"
+} 

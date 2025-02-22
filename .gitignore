@@ -1,0 +1,33 @@
+# Configuration and local files
+src/config.py
+src/local_config.json
+src/wish_granter_cache.json
+src/wish_granter_history.json
+*.history.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.class
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+src/local_config.example.json

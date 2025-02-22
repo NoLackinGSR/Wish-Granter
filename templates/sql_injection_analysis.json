@@ -1,0 +1,7 @@
+{
+    "name": "SQL Injection Analysis",
+    "description": "SQL injection vulnerability detection:\n1. Parameter analysis for SQL injection\n2. Error message inspection\n3. Response pattern analysis\n4. Database fingerprinting\n5. Injection point identification",
+    "prompt_format": "Analyze this HTTP interaction for SQL injection vulnerabilities.\n\nFocus on:\n1. User input parameters\n2. Error messages and responses\n3. Database fingerprints\n4. Input handling patterns\n\nFormat your response as:\n1. INJECTION POINTS\n[List parameters vulnerable to SQL injection]\n\n2. EVIDENCE\n[Error messages or response patterns indicating SQL injection]\n\n3. DATABASE INFO\n[Any identified database details]\n\n4. RECOMMENDATIONS\n[Specific fixes for each vulnerability]",
+    "category": "security",
+    "version": "1.0"
+} 

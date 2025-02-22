@@ -1,0 +1,7 @@
+Analyze this HTTP request/response for security issues. Consider:
+1. Input validation
+2. Authentication
+3. Authorization
+4. Data exposure
+4. Security headers
+5. Common vulnerabilities 

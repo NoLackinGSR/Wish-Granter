@@ -1,0 +1,7 @@
+{
+    "name": "XSS Detection",
+    "description": "Cross-Site Scripting vulnerability analysis:\n1. Input/output context analysis\n2. Content-Type verification\n3. Encoding/escaping check\n4. XSS vector identification\n5. Impact assessment",
+    "prompt_format": "Analyze this HTTP interaction for XSS vulnerabilities.\n\nFocus on:\n1. Input parameters and their contexts\n2. Output encoding\n3. Content-Type headers\n4. Security headers related to XSS\n\nFormat your response as:\n1. VULNERABLE CONTEXTS\n[List where user input appears in output]\n\n2. XSS VECTORS\n[Possible injection points and payloads]\n\n3. IMPACT\n[Potential damage from successful exploitation]\n\n4. MITIGATIONS\n[Required security controls]",
+    "category": "security",
+    "version": "1.0"
+} 

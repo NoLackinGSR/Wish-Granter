@@ -1,0 +1,7 @@
+{
+    "name": "Security Headers Analysis",
+    "description": "HTTP security headers analysis:\n1. Present headers verification\n2. Missing headers identification\n3. Configuration analysis\n4. Improvement recommendations",
+    "prompt_format": "Analyze the security headers in this HTTP interaction. Please provide your response in plain text only, without using any special characters, emojis, or Unicode symbols.\n\nUse '[PRESENT]' or '[MISSING]' to indicate header status.\n\nFor each security header:\n1. Check if it exists\n2. Analyze its configuration\n3. Indicate security implications\n4. Provide specific recommendations\n\nRequired format:\nHeader: [STATUS]\nConfiguration: [DETAILS]\nRisk: [DESCRIPTION]\nRecommendation: [SPECIFIC FIXES]\n\nFollow with an overall security assessment and prioritized recommendations.",
+    "category": "security",
+    "version": "1.0"
+} 

@@ -1,0 +1,7 @@
+{
+    "name": "API Security Review",
+    "description": "API security assessment:\n1. Authentication mechanism\n2. Authorization controls\n3. Input validation\n4. Rate limiting\n5. Data exposure analysis",
+    "prompt_format": "Analyze this API interaction for security issues.\n\nFocus on:\n1. Authentication implementation\n2. Authorization mechanisms\n3. Input validation\n4. Rate limiting\n5. Data exposure\n\nFormat your response as:\n1. API SECURITY CONTROLS\n[List implemented security measures]\n\n2. VULNERABILITIES\n[Identified security issues with evidence]\n\n3. COMPLIANCE\n[API security best practices status]\n\n4. RECOMMENDATIONS\n[Specific security improvements]",
+    "category": "security",
+    "version": "1.0"
+} 

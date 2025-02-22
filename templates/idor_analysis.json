@@ -1,0 +1,7 @@
+{
+    "name": "IDOR Analysis",
+    "description": "Insecure Direct Object Reference analysis:\n1. Parameter enumeration\n2. Access control verification\n3. Reference pattern analysis\n4. Authorization check\n5. Horizontal/vertical access testing",
+    "prompt_format": "Analyze this HTTP interaction for IDOR vulnerabilities.\n\nFocus on:\n1. Object references in parameters\n2. Access control mechanisms\n3. Authorization checks\n4. Reference patterns\n\nFormat your response as:\n1. OBJECT REFERENCES\n[List all identified object references]\n\n2. ACCESS CONTROLS\n[Analysis of current protections]\n\n3. VULNERABILITIES\n[Confirmed IDOR issues with evidence]\n\n4. RECOMMENDATIONS\n[Specific access control improvements]",
+    "category": "security",
+    "version": "1.0"
+} 
