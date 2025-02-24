@@ -17,9 +17,10 @@ A Burp Suite extension that uses AI to automatically analyze web application sec
 - Compatible AI service API key
 
 ## Usage
-
-1. Right-click on a request
-2. Select "Analyze with AI"
-3. View results in the Wish Granter tab
+1. Import the "main.py" file into Burp
+2. Configure your AI configuration in local_config.json. A sample file is available ***(MUST BE DONE HERE FOR NOW)***
+3. Right-click on a request
+4. Select "Analyze with AI"
+5. View results in the Wish Granter tab
 
 Analysis templates are available in the Templates panel for specific analyses. 
