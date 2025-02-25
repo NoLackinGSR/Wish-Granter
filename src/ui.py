@@ -726,6 +726,7 @@ class HTTPDisplayPanel(BasePanel, IMessageEditorController):
         self.responseViewer = None
         self.current_request = None
         self.current_response = None
+        self.extender = None
         self._callbacks = None
         self._helpers = None
         self._httpService = None  # Renommé avec underscore
@@ -1373,20 +1374,20 @@ class MCPTemplatesPanel(BasePanel):
         
         template = self.templates[selected]
         
-        # Créer la zone de réponse
+        # Create response area
         response_area = self.extender.panel.aiResponsePanel.addNewAnalysis(
             "Template: " + selected
         )
-        response_area.setText("Analyzing with template: " + selected + "...\n")
+        response_area.setText("Analysis in progress...")
 
         try:
-            # Récupérer la requête/réponse actuelles
+            # Get current request/response
             http_panel = self.extender.panel.httpDisplayPanel
             if not http_panel.current_request or not http_panel.current_response:
                 response_area.setText("Error: No request/response loaded")
                 return
 
-            # Construire le prompt
+            # Build prompt
             request_str = self.extender._helpers.bytesToString(http_panel.current_request)
             response_str = self.extender._helpers.bytesToString(http_panel.current_response)
             
@@ -1398,23 +1399,24 @@ class MCPTemplatesPanel(BasePanel):
             
             prompt += "Request:\n{}\n\nResponse:\n{}".format(request_str, response_str)
             
-            # Utiliser le même worker que Analyze with AI
-            worker = AnalysisWorker(self.extender, prompt, response_area)
+            # Create and execute worker
+            worker = AnalysisWorker(self.extender, prompt, response_area, None)
             worker.execute()
-
+            
         except Exception as e:
-            self.extender._callbacks.printError("Error in template analysis: " + str(e))
-            response_area.setText("Error: " + str(e))
+            error_msg = "Error applying template: {}".format(str(e))
+            self.extender._callbacks.printError(error_msg)
+            response_area.setText(error_msg)
 
 class AnalysisWorker(SwingWorker):
-    def __init__(self, extender, prompt, response_area):
+    def __init__(self, extender, prompt, response_area, menu_factory=None):
         SwingWorker.__init__(self)
         self.extender = extender
         self.prompt = prompt
         self.response_area = response_area
-        self.response_area.setText("Analysis in progress...\n")
+        self.menu_factory = menu_factory
         self.worker_cancelled = [False]
-    
+
     def doInBackground(self):
         try:
             if self.worker_cancelled[0]:
@@ -1423,17 +1425,7 @@ class AnalysisWorker(SwingWorker):
             self.extender._callbacks.printOutput(
                 "Starting AI analysis (prompt length: {})".format(len(self.prompt))
             )
-            
-            # Définir le callback de streaming
-            def stream_callback(text):
-                self.publish(text)
-            
-            # Appeler analyze avec le callback
-            result = self.extender.service.analyze(
-                self.prompt,
-                callback=stream_callback
-            )
-            
+            result = self.extender.service.analyze(self.prompt)
             self.extender._callbacks.printOutput("Analysis completed")
             return result
             
@@ -1441,36 +1433,16 @@ class AnalysisWorker(SwingWorker):
             self.extender._callbacks.printError("Error in analysis: {}".format(str(e)))
             return "Error: {}".format(str(e))
 
-    def process(self, chunks):
-        """Appelé quand de nouveaux chunks sont publiés"""
-        try:
-            for chunk in chunks:
-                current_text = self.response_area.getText()
-                # Si c'est toujours le message initial, le remplacer
-                if current_text == "Analysis in progress...\n":
-                    self.response_area.setText(chunk)
-                else:
-                    # Sinon, ajouter au texte existant
-                    self.response_area.setText(current_text + chunk)
-                # Défiler vers le bas
-                self.response_area.setCaretPosition(
-                    self.response_area.getDocument().getLength()
-                )
-        except Exception as e:
-            self.extender._callbacks.printError(
-                "Error processing chunk: {}".format(str(e))
-            )
-
     def done(self):
         try:
             if not self.worker_cancelled[0]:
                 result = self.get()
-                if result.startswith("Error:"):
-                    self.response_area.setText(result)
+                self.response_area.setText(result)
+                self.response_area.setCaretPosition(0)
         except Exception as e:
-            self.extender._callbacks.printError(
-                "Error displaying results: {}".format(str(e))
-            )
-            self.response_area.setText(
-                "Error: {}".format(str(e))
-            ) 
+            self.extender._callbacks.printError("Error displaying results: {}".format(str(e)))
+            self.response_area.setText("Error: {}".format(str(e)))
+        finally:
+            # Reset the analyzing flag if menu_factory exists
+            if self.menu_factory:
+                self.menu_factory.is_analyzing = False 

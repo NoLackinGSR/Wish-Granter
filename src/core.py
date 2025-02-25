@@ -22,44 +22,22 @@ class WishGranterService:
         self.debug_mode = False
 
     def _normalize_string(self, text, source_desc="text"):
-        """Méthode utilitaire pour normaliser une chaîne de caractères en UTF-8"""
-        if self.debug_mode:
-            self.callbacks.printOutput("[Wish Granter] Normalizing {} of type: {}".format(
-                source_desc, type(text)
-            ))
-        
+        """Normalize text to UTF-8 string format"""
         try:
-            # Convertir en string si ce n'est pas déjà le cas
+            if self.debug_mode:
+                self.callbacks.printOutput("[Wish Granter] Normalizing {}".format(source_desc))
+            
+            # Direct conversion to string if needed
             if not isinstance(text, (str, unicode)):
                 text = str(text)
             
-            # Si c'est une chaîne unicode, la convertir en str
-            if isinstance(text, unicode):
-                text = text.encode('utf-8')
-            
-            # Utiliser les helpers de Burp pour la conversion finale
-            if isinstance(text, str):
-                # Convertir en bytes puis en string via les helpers
-                text_bytes = text.encode('utf-8', 'replace')
-                text = self.helpers.bytesToString(text_bytes)
-            
-            if self.debug_mode:
-                self.callbacks.printOutput("[Wish Granter] Normalized {} successfully".format(source_desc))
-            
-            return text
+            # Convert to UTF-8 bytes and then to Burp string format
+            return self.helpers.bytesToString(text.encode('utf-8', 'replace'))
             
         except Exception as e:
-            self.callbacks.printError("[Wish Granter] Error normalizing {}: {}".format(
-                source_desc, str(e)
-            ))
-            # Fallback : convertir en ASCII basique
-            try:
-                if isinstance(text, unicode):
-                    return text.encode('ascii', 'replace')
-                return str(text).encode('ascii', 'replace')
-            except:
-                return str(text)
-            
+            self.callbacks.printError("[Wish Granter] Error normalizing {}: {}".format(source_desc, str(e)))
+            return str(text)
+
     def initialize(self, callbacks):
         self.callbacks = callbacks
         self.config_manager = ConfigManager(callbacks)
@@ -70,21 +48,21 @@ class WishGranterService:
         self.request_manager = RequestManager(callbacks)
         self.history_manager = HistoryManager(callbacks)
         
-        # Initialiser les helpers de Burp
+        # Initialize Burp helpers
         self.helpers = callbacks.getHelpers()
         
-        # Charger la configuration pour le debug mode et forcer le log
+        # Load configuration and set debug mode
         config = self.config_manager.load_config()
         self.debug_mode = config.get('debug_mode', False)
         
-        # Toujours logger l'état du debug mode au démarrage
+        # Log debug mode state on startup
         callbacks.printOutput("[Wish Granter Service] Debug mode state: {}".format(self.debug_mode))
         
         if self.debug_mode:
             callbacks.printOutput("[Wish Granter Service] Debug mode is ENABLED")
             callbacks.printOutput("[Wish Granter Service] Configuration loaded: {}".format(config))
         
-        # Log l'initialisation
+        # Log initialization status
         callbacks.printOutput("[Wish Granter Service] Initialized successfully")
 
     def analyze(self, prompt, callback=None):
@@ -92,7 +70,7 @@ class WishGranterService:
             self.callbacks.printOutput("=== DEBUG START ===")
             self.callbacks.printOutput("Starting analysis...")
             
-            # Préparer la requête
+            # Prepare API request
             config = self.config_manager.load_config()
             api_url = str(config.get('api_url', '')).strip()
             api_key = str(config.get('api_key', '')).strip()
@@ -105,7 +83,7 @@ class WishGranterService:
                 raise Exception("API URL or key not configured")
 
             try:
-                # Convertir tout en ASCII basique
+                # Convert to basic ASCII
                 if isinstance(prompt, unicode):
                     prompt = prompt.encode('ascii', 'replace')
                 else:
@@ -113,17 +91,17 @@ class WishGranterService:
 
                 system_prompt = str(config.get('system_prompt', '')).encode('ascii', 'replace')
                 
-                # Construire un payload JSON minimal avec streaming activé
+                # Build minimal JSON payload with streaming enabled
                 payload = {
                     "model": model,
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": prompt}
                     ],
-                    "stream": True  # Activer le streaming
+                    "stream": True
                 }
                 
-                # Convertir en JSON ASCII
+                # Convert to ASCII JSON
                 json_data = json.dumps(payload, ensure_ascii=True)
                 self.callbacks.printOutput("Payload prepared with streaming enabled")
                 
@@ -131,7 +109,7 @@ class WishGranterService:
                 self.callbacks.printError("Error preparing payload: " + str(e))
                 raise Exception("Failed to prepare payload: " + str(e))
 
-            # Envoyer la requête HTTP
+            # Send HTTP request
             try:
                 self.callbacks.printOutput("Sending streaming request...")
                 requestObj = urllib2.Request(
@@ -144,33 +122,33 @@ class WishGranterService:
                 response = urllib2.urlopen(requestObj)
                 self.callbacks.printOutput("Connection established, starting to read response...")
                 
-                # Initialiser le buffer pour la réponse complète
+                # Initialize buffer for complete response
                 full_response = []
                 
-                # Lire la réponse en streaming
+                # Read streaming response
                 while True:
                     chunk = response.readline()
                     if not chunk:
                         self.callbacks.printOutput("End of stream reached")
                         break
                         
-                    # Log le chunk brut pour debug
+                    # Log raw chunk for debug
                     self.callbacks.printOutput("Raw chunk received: " + chunk.strip())
                         
-                    # Ignorer les lignes vides
+                    # Ignore empty lines
                     if not chunk.strip():
                         continue
                         
-                    # Retirer le préfixe "data: " si présent
+                    # Remove prefix "data: " if present
                     if chunk.startswith('data: '):
                         chunk = chunk[6:]
                     
                     try:
-                        # Parser le chunk JSON
+                        # Parse chunk JSON
                         chunk_data = json.loads(chunk)
                         self.callbacks.printOutput("Parsed chunk data: " + str(chunk_data))
                         
-                        # Extraire le texte selon le format de réponse
+                        # Extract text according to response format
                         text = None
                         
                         # Format 1: response.content[].text
@@ -201,10 +179,10 @@ class WishGranterService:
                         self.callbacks.printError("Error processing chunk: " + str(e))
                         continue
                 
-                # Joindre tous les morceaux de réponse
+                # Join all response pieces
                 final_content = ''.join(full_response)
                 
-                # Convertir en ASCII si nécessaire
+                # Convert to ASCII if necessary
                 if isinstance(final_content, unicode):
                     final_content = final_content.encode('ascii', 'replace')
                 else:
@@ -252,7 +230,7 @@ class ConfigManager:
     
     def save_config(self, config):
         try:
-            # Créer le répertoire parent si nécessaire
+            # Create parent directory if necessary
             config_dir = os.path.dirname(self.config_path)
             if not os.path.exists(config_dir):
                 os.makedirs(config_dir)
@@ -292,7 +270,7 @@ class CacheManager:
         return self.cache.get(key)
     
     def set(self, key, value):
-        # S'assurer que la valeur est en Unicode avant la mise en cache
+        # Ensure value is in Unicode before caching
         if isinstance(value, bytes):
             value = value.decode('utf-8', errors='replace')
         elif not isinstance(value, str):
@@ -305,15 +283,15 @@ class RequestManager:
     def __init__(self, callbacks):
         self.callbacks = callbacks
         self._http_listener = None
-        self.groups = {}  # Dictionnaire pour stocker les groupes
+        self.groups = {}  # Dictionary to store groups
     
     def create_group(self, name):
-        """Crée un nouveau groupe de requêtes"""
+        """Create a new group of requests"""
         if name not in self.groups:
             self.groups[name] = RequestGroup(name)
     
     def add_to_group(self, group_name, request, response):
-        """Ajoute une requête/réponse à un groupe"""
+        """Add a request/response to a group"""
         if group_name not in self.groups:
             self.create_group(group_name)
         self.groups[group_name].add_request(request, response)
@@ -351,7 +329,7 @@ class RequestGroup:
         self.notes = ""
     
     def add_request(self, request, response):
-        """Ajoute une paire requête/réponse au groupe"""
+        """Add a request/response pair to the group"""
         self.requests.append({
             'request': request,
             'response': response,
@@ -359,7 +337,7 @@ class RequestGroup:
         })
     
     def get_context(self):
-        """Retourne une représentation textuelle du groupe pour l'analyse"""
+        """Return a textual representation of the group for analysis"""
         context = "Group: {0}\n\n".format(self.name)
         for idx, req in enumerate(self.requests, 1):
             context += "Request #{0}:\n".format(idx)

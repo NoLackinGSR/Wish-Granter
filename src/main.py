@@ -100,7 +100,7 @@ class BurpExtenderContextMenu(IContextMenuFactory):
     def __init__(self, extender):
         self.extender = extender
         self._helpers = extender._helpers
-        self.is_analyzing = False  # Flag pour éviter les doubles analyses
+        self.is_analyzing = False
 
     def createMenuItems(self, invocation):
         self._invocation = invocation
@@ -125,7 +125,7 @@ class BurpExtenderContextMenu(IContextMenuFactory):
             request = messageInfo.getRequest()
             response = messageInfo.getResponse() if messageInfo.getResponse() else b""
             
-            # Assurer l'encodage UTF-8 pour les requêtes et réponses
+            # Ensure UTF-8 encoding for requests and responses
             request_str = self._helpers.bytesToString(request).encode('utf-8').decode('utf-8', errors='replace')
             response_str = self._helpers.bytesToString(response).encode('utf-8').decode('utf-8', errors='replace') if response else ""
             
@@ -146,7 +146,7 @@ class BurpExtenderContextMenu(IContextMenuFactory):
                 detailed_prompt, url, request_str, response_str
             )
             
-            worker = AnalysisWorker(self.extender, prompt, response_area)
+            worker = AnalysisWorker(self.extender, prompt, response_area, self)
             worker.execute()
             
         except Exception as e:
@@ -156,11 +156,12 @@ class BurpExtenderContextMenu(IContextMenuFactory):
             self.is_analyzing = False
 
 class AnalysisWorker(SwingWorker):
-    def __init__(self, extender, prompt, response_area):
+    def __init__(self, extender, prompt, response_area, menu_factory):
         SwingWorker.__init__(self)
         self.extender = extender
         self.prompt = prompt
         self.response_area = response_area
+        self.menu_factory = menu_factory
         self.worker_cancelled = [False]
 
     def doInBackground(self):
@@ -187,4 +188,7 @@ class AnalysisWorker(SwingWorker):
                 self.response_area.setCaretPosition(0)
         except Exception as e:
             self.extender._callbacks.printError("Error displaying results: {}".format(str(e)))
-            self.response_area.setText("Error: {}".format(str(e))) 
+            self.response_area.setText("Error: {}".format(str(e)))
+        finally:
+            # Reset the analyzing flag
+            self.menu_factory.is_analyzing = False 
