@@ -1,12 +1,19 @@
+<div align="center">
+  
 # Wish Granter
 
+
+  
+![wishgranter](https://github.com/user-attachments/assets/295c7b00-891f-4f21-96b5-75c459a50b06)
+
 A Burp Suite extension that uses AI to automatically analyze web application security.
+</p>
+</div>
 
 ## Features
 
 - Automatic HTTP request analysis
 - Predefined analysis templates
-- Chat interface for specific queries
 - Result caching
 - Customizable prompts
 
