@@ -205,8 +205,12 @@ class APIConfigPanel(BasePanel):
                     main_panel.rightPanel.setVisible(show_chat)
                     main_panel.revalidate()
                     main_panel.repaint()
-    def saveConfig(self):
-        config = {
+    def saveConfig(self, event=None):
+        # Get existing config first
+        current_config = self.service.config_manager.get_current_config()
+        
+        # Update with new values
+        new_config = {
             "api_url": self.getApiUrl(),
             "api_key": self.getApiKey(),
             "model": self.getModel(),
@@ -215,7 +219,20 @@ class APIConfigPanel(BasePanel):
             "show_chat": self.show_chat_checkbox.isSelected()
         }
         
-        if self.service.config_manager.save_config(config):
+        # Merge configs, preserving existing values not in the form
+        current_config.update(new_config)
+        
+        if self.service.config_manager.save_config(current_config):
+            # Force reload the configuration in the service
+            self.service.config_manager.config = None  # Force a reload on next get_current_config
+            self.service.config_manager.load_config()  # Reload immediately
+            
+            # Update debug mode
+            self.service.debug_mode = current_config.get('debug_mode', False)
+            
+            if self.service.debug_mode:
+                self.service.callbacks.printOutput("[Wish Granter] Configuration updated: {}".format(str(current_config)))
+            
             JOptionPane.showMessageDialog(
                 self,
                 "Configuration saved successfully",

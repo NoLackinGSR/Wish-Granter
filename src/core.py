@@ -70,8 +70,8 @@ class WishGranterService:
             self.callbacks.printOutput("=== DEBUG START ===")
             self.callbacks.printOutput("Starting analysis...")
             
-            # Prepare API request
-            config = self.config_manager.load_config()
+            # Get the most recent configuration
+            config = self.config_manager.get_current_config()
             api_url = str(config.get('api_url', '')).strip()
             api_key = str(config.get('api_key', '')).strip()
             model = str(config.get('model', '')).strip()
@@ -209,26 +209,34 @@ class ConfigManager:
             CONFIG_FILENAME
         )
         self.callbacks.printOutput("Config path: " + self.config_path)
-        self.config = self.load_config()
+        self.load_config()  # Initial load
     
     def load_config(self):
+        """Load configuration from file"""
         try:
             if os.path.exists(self.config_path):
                 with io.open(self.config_path, 'r', encoding='utf-8') as f:
-                    return json.loads(f.read())
-            return {
-                'api_url': DEFAULT_API_URL,
-                'api_key': DEFAULT_API_KEY,
-                'model': DEFAULT_MODEL,
-                'timeout': DEFAULT_TIMEOUT,
-                'system_prompt': DEFAULT_SYSTEM_PROMPT,
-                'detailed_prompt': DEFAULT_DETAILED_PROMPT
-            }
+                    self.config = json.loads(f.read())
+                    if self.callbacks:
+                        self.callbacks.printOutput("[ConfigManager] Loaded config: " + str(self.config))
+            else:
+                self.config = {
+                    'api_url': DEFAULT_API_URL,
+                    'api_key': DEFAULT_API_KEY,
+                    'model': DEFAULT_MODEL,
+                    'timeout': DEFAULT_TIMEOUT,
+                    'system_prompt': DEFAULT_SYSTEM_PROMPT,
+                    'detailed_prompt': DEFAULT_DETAILED_PROMPT
+                }
+            return self.config
         except Exception as e:
-            self.callbacks.printError("Error loading config: " + str(e))
-            return {}
+            if self.callbacks:
+                self.callbacks.printError("[ConfigManager] Error loading config: " + str(e))
+            self.config = {}
+            return self.config
     
     def save_config(self, config):
+        """Save configuration to file"""
         try:
             # Create parent directory if necessary
             config_dir = os.path.dirname(self.config_path)
@@ -239,11 +247,18 @@ class ConfigManager:
                 json_str = json.dumps(config, indent=4, ensure_ascii=False)
                 f.write(unicode(json_str))
             
-            self.config = config
+            if self.callbacks:
+                self.callbacks.printOutput("[ConfigManager] Saved config: " + str(config))
+            
             return True
         except Exception as e:
-            self.callbacks.printError("Error saving config: " + str(e))
+            if self.callbacks:
+                self.callbacks.printError("[ConfigManager] Error saving config: " + str(e))
             return False
+
+    def get_current_config(self):
+        """Always reload and return the most recent config from file"""
+        return self.load_config()
 
 class CacheManager:
     def __init__(self, cache_path):
