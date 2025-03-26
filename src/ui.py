@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from javax.swing import (
-    JPanel, JButton, JTextField, JLabel, JTextArea, JScrollPane,
-    JOptionPane, JMenuItem, BoxLayout, Box, JTabbedPane, JPopupMenu, JCheckBox,
+    JFrame, JPanel, JLabel, JTextArea, JButton, JTextField, JScrollPane, 
+    BoxLayout, JOptionPane, Box, 
+    WindowConstants, GroupLayout, SwingUtilities, AbstractButton, 
+    JMenuItem, JTabbedPane, JPopupMenu, JCheckBox,
     BorderFactory, JFileChooser, JSeparator, JSplitPane, SwingConstants, JList,
-    KeyStroke, AbstractAction, ListSelectionModel, SwingWorker, JPasswordField
+    KeyStroke, AbstractAction, ListSelectionModel, SwingWorker, JPasswordField, JProgressBar
 )
 from javax.swing.border import TitledBorder, EmptyBorder
 from java.awt import (
@@ -29,7 +31,6 @@ from constants import (
     DEFAULT_SYSTEM_PROMPT, DEFAULT_DETAILED_PROMPT,
     DEFAULT_API_URL, DEFAULT_API_KEY, DEFAULT_MODEL, DEFAULT_TIMEOUT
 )
-from main import AnalysisWorker
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 if not os.path.exists(TEMPLATES_DIR):
@@ -334,7 +335,7 @@ class ChatPanel(BasePanel):
 
             def keyPressed(self, e):
                 if e.getKeyCode() == KeyEvent.VK_ENTER and e.isControlDown():
-                    self.chat_panel.sendQuestion()
+                    self.chat_panel.sendMessage()
 
             def keyTyped(self, e):
                 pass
@@ -370,6 +371,17 @@ class ChatPanel(BasePanel):
         
         try:
             if self.extender:
+                # Display user message immediately
+                self.conversation_history.append(("User", message))
+                self.updateChatDisplay()
+                
+                # Add loading indicator
+                self.chatArea.append("Assistant: [Loading...]\n\n")
+                self.chatArea.setCaretPosition(self.chatArea.getDocument().getLength())
+                
+                # Disable send button and field while processing
+                self.questionField.setEnabled(False)
+                
                 # Construction du prompt sans manipulation d'encodage
                 prompt = ""
                 if self.current_context:
@@ -381,16 +393,52 @@ class ChatPanel(BasePanel):
                             prompt += "{}: {}\n".format(role, content)
                         prompt += "\n"
                     prompt += "User: {}".format(message)
-                    self.conversation_history.append(("User", message))
                 self.questionField.setText("")
                 
-                response = self.extender.sendToAI(prompt)
-                self.conversation_history.append(("Assistant", response))
-                self.updateChatDisplay()
+                # Create a SwingWorker to handle the API call
+                class ChatWorker(SwingWorker):
+                    def __init__(self, chat_panel, extender, prompt):
+                        self.chat_panel = chat_panel
+                        self.extender = extender
+                        self.prompt = prompt
+                        SwingWorker.__init__(self)
+                    
+                    def doInBackground(self):
+                        try:
+                            return self.extender.sendToAI(self.prompt)
+                        except Exception as e:
+                            return "Error: " + str(e)
+                    
+                    def done(self):
+                        try:
+                            # Get the response
+                            response = self.get()
+                            
+                            # Update conversation history
+                            self.chat_panel.conversation_history.pop()  # Remove the User message
+                            self.chat_panel.conversation_history.append(("User", message))  # Add it back
+                            self.chat_panel.conversation_history.append(("Assistant", response))
+                            
+                            # Update display
+                            self.chat_panel.updateChatDisplay()
+                            
+                            # Save history
+                            self.chat_panel.history_manager.save_history(self.chat_panel.conversation_history)
+                        except Exception as e:
+                            self.chat_panel.chatArea.setText("")
+                            self.chat_panel.chatArea.append("Error: {}\n\n".format(str(e)))
+                        finally:
+                            # Re-enable the UI
+                            self.chat_panel.questionField.setEnabled(True)
+                            self.chat_panel.questionField.requestFocus()
                 
-                self.history_manager.save_history(self.conversation_history)
+                # Execute the worker
+                worker = ChatWorker(self, self.extender, prompt)
+                worker.execute()
+                
         except Exception as e:
             self.chatArea.append("Error: {}\n\n".format(str(e)))
+            self.questionField.setEnabled(True)
 
     def updateChatDisplay(self):
         self.chatArea.setText("")
@@ -1446,6 +1494,33 @@ class AnalysisWorker(SwingWorker):
         self.response_area = response_area
         self.menu_factory = menu_factory
         self.worker_cancelled = [False]
+        
+        # Create and add progress indicator
+        self.progress_panel = JPanel(BorderLayout())
+        self.progress_panel.setBackground(BACKGROUND_COLOR)
+        
+        # Create label
+        status_label = JLabel("Analysis in progress...", SwingConstants.CENTER)
+        status_label.setForeground(TEXT_COLOR)
+        self.progress_panel.add(status_label, BorderLayout.NORTH)
+        
+        # Create progress bar
+        self.progress_bar = JProgressBar()
+        self.progress_bar.setIndeterminate(True)
+        self.progress_bar.setStringPainted(True)
+        self.progress_bar.setString("Waiting for API response...")
+        self.progress_bar.setBackground(BACKGROUND_COLOR)
+        self.progress_bar.setForeground(ACCENT_COLOR)
+        self.progress_panel.add(self.progress_bar, BorderLayout.CENTER)
+        
+        # Get the parent component of the response area
+        parent = self.response_area.getParent()
+        
+        # Save original component to restore later
+        self.original_component = parent.getViewport().getView()
+        
+        # Replace with progress panel
+        parent.getViewport().setView(self.progress_panel)
 
     def doInBackground(self):
         try:
@@ -1465,6 +1540,13 @@ class AnalysisWorker(SwingWorker):
 
     def done(self):
         try:
+            # Restore original text area
+            parent = self.progress_panel.getParent()
+            if parent and hasattr(parent, 'setView'):
+                parent.setView(self.original_component)
+            elif parent and hasattr(parent, 'getViewport'):
+                parent.getViewport().setView(self.original_component)
+            
             if not self.worker_cancelled[0]:
                 result = self.get()
                 self.response_area.setText(result)
