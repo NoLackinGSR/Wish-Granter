@@ -6,6 +6,7 @@ from datetime import datetime
 import urllib2
 import io  # Ajouter l'import de io
 from config import DEFAULT_API_URL, DEFAULT_API_KEY, DEFAULT_MODEL, DEFAULT_TIMEOUT, DEFAULT_SYSTEM_PROMPT, DEFAULT_DETAILED_PROMPT
+import socket
 
 # Constants
 CONFIG_FILENAME = "local_config.json"
@@ -122,6 +123,9 @@ class WishGranterService:
                 # Check if insecure HTTP requests are allowed
                 allow_insecure = config.get('allow_insecure', False)
                 
+                # Get timeout from config
+                timeout_seconds = int(config.get('timeout', 30))
+                
                 if allow_insecure:
                     self.callbacks.printOutput("Warning: Using insecure HTTP requests (SSL verification disabled)")
                     import ssl
@@ -132,37 +136,56 @@ class WishGranterService:
                     
                     # Create opener with custom SSL context
                     opener = urllib2.build_opener(urllib2.HTTPSHandler(context=ctx))
-                    response = opener.open(requestObj)
+                    response = opener.open(requestObj, timeout=timeout_seconds)
                 else:
                     # Use default opener with SSL verification
-                    response = urllib2.urlopen(requestObj)
+                    response = urllib2.urlopen(requestObj, timeout=timeout_seconds)
                 
                 self.callbacks.printOutput("Connection established, starting to read response...")
                 
                 # Initialize buffer for complete response
                 full_response = []
+                response_size = 0
+                max_response_size = 1024 * 1024 * 5  # 5MB limit to prevent memory issues
                 
                 # Read streaming response
                 while True:
-                    chunk = response.readline()
-                    if not chunk:
-                        self.callbacks.printOutput("End of stream reached")
-                        break
-                        
-                    # Log raw chunk for debug
-                    self.callbacks.printOutput("Raw chunk received: " + chunk.strip())
-                        
-                    # Ignore empty lines
-                    if not chunk.strip():
-                        continue
-                        
-                    # Remove prefix "data: " if present
-                    if chunk.startswith('data: '):
-                        chunk = chunk[6:]
-                    
                     try:
+                        chunk = response.readline()
+                        if not chunk:
+                            self.callbacks.printOutput("End of stream reached")
+                            break
+                        
+                        # Check if response is getting too large
+                        response_size += len(chunk)
+                        if response_size > max_response_size:
+                            self.callbacks.printError("Response exceeded maximum size limit (5MB)")
+                            full_response.append("\n\n[RESPONSE TRUNCATED: Maximum size limit reached]")
+                            break
+                            
+                        # Log raw chunk for debug
+                        self.callbacks.printOutput("Raw chunk received: " + chunk.strip())
+                            
+                        # Ignore empty lines
+                        if not chunk.strip():
+                            continue
+                            
+                        # Remove prefix "data: " if present
+                        if chunk.startswith('data: '):
+                            chunk = chunk[6:]
+                        
+                        # Vérifier si le chunk est du JSON valide avant de le parser
+                        chunk = chunk.strip()
+                        if not chunk or chunk == "[DONE]":
+                            continue
+                            
                         # Parse chunk JSON
-                        chunk_data = json.loads(chunk)
+                        try:
+                            chunk_data = json.loads(chunk)
+                        except ValueError as json_error:
+                            self.callbacks.printError("Skipping invalid JSON chunk: " + str(json_error) + " - Raw: " + chunk)
+                            continue
+                            
                         self.callbacks.printOutput("Parsed chunk data: " + str(chunk_data))
                         
                         # Extract text according to response format
@@ -191,7 +214,6 @@ class WishGranterService:
                             full_response.append(text)
                             if callback:
                                 callback(text)
-                        
                     except Exception as e:
                         self.callbacks.printError("Error processing chunk: " + str(e))
                         continue
@@ -208,9 +230,25 @@ class WishGranterService:
                 self.callbacks.printOutput("=== DEBUG END ===")
                 return final_content
                 
+            except urllib2.URLError as e:
+                if hasattr(e, 'reason') and isinstance(e.reason, socket.timeout):
+                    error_msg = "Request timed out after {} seconds. Try increasing the timeout in configuration.".format(timeout_seconds)
+                elif hasattr(e, 'code') and e.code == 413:
+                    error_msg = "Request entity too large. Try reducing the size of your prompt."
+                elif hasattr(e, 'code'):
+                    error_msg = "HTTP Error {}: {}".format(e.code, str(e))
+                else:
+                    error_msg = "URL Error: {}".format(str(e))
+                self.callbacks.printError("Error during streaming request: " + error_msg)
+                raise Exception("Streaming request failed: " + error_msg)
+            except socket.timeout:
+                error_msg = "Connection timed out after {} seconds. Try increasing the timeout in configuration.".format(timeout_seconds)
+                self.callbacks.printError("Error during streaming request: " + error_msg)
+                raise Exception("Streaming request failed: " + error_msg)
             except Exception as e:
-                self.callbacks.printError("Error during streaming request: " + str(e))
-                raise Exception("Streaming request failed: " + str(e))
+                error_msg = str(e)
+                self.callbacks.printError("Error during streaming request: " + error_msg)
+                raise Exception("Streaming request failed: " + error_msg)
             
         except Exception as e:
             error_msg = str(e)

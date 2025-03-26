@@ -11,10 +11,10 @@ from javax.swing import (
 from javax.swing.border import TitledBorder, EmptyBorder
 from java.awt import (
     BorderLayout, FlowLayout, GridBagLayout, GridBagConstraints,
-    Dimension, Insets, Font, Toolkit, Color, RenderingHints
+    Dimension, Insets, Font, Toolkit, Color, RenderingHints, Cursor
 )
 from java.awt.event import KeyAdapter, KeyEvent, FocusAdapter, MouseAdapter, ActionEvent, KeyListener
-from java.lang import System, Runtime
+from java.lang import System, Runtime, Thread
 from javax.swing.text import JTextComponent
 from javax.swing.event import DocumentListener
 from java.awt.datatransfer import StringSelection, DataFlavor
@@ -382,6 +382,14 @@ class ChatPanel(BasePanel):
                 # Disable send button and field while processing
                 self.questionField.setEnabled(False)
                 
+                # Set wait cursor - appliquer à de multiples composants
+                root_frame = SwingUtilities.getWindowAncestor(self)
+                if root_frame:
+                    root_frame.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR))
+                
+                self.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR))
+                self.chatArea.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR))
+                
                 # Construction du prompt sans manipulation d'encodage
                 prompt = ""
                 if self.current_context:
@@ -401,29 +409,76 @@ class ChatPanel(BasePanel):
                         self.chat_panel = chat_panel
                         self.extender = extender
                         self.prompt = prompt
+                        self.cancelled = False
                         SwingWorker.__init__(self)
+                        
+                        # Create a progress dialog
+                        self.progress_dialog = JDialog(SwingUtilities.getWindowAncestor(chat_panel), "Processing Request", False)
+                        self.progress_dialog.setSize(350, 120)
+                        self.progress_dialog.setLayout(BorderLayout())
+                        self.progress_dialog.setLocationRelativeTo(None)
+                        
+                        # Create content panel
+                        content_panel = JPanel(BorderLayout(10, 10))
+                        content_panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
+                        content_panel.setBackground(BACKGROUND_COLOR)
+                        
+                        # Add message
+                        message = JLabel("Waiting for AI response...", SwingConstants.CENTER)
+                        message.setForeground(TEXT_COLOR)
+                        message.setFont(message.getFont().deriveFont(Font.BOLD))
+                        content_panel.add(message, BorderLayout.NORTH)
+                        
+                        # Add progress bar
+                        self.progress_bar = JProgressBar()
+                        self.progress_bar.setIndeterminate(True)
+                        content_panel.add(self.progress_bar, BorderLayout.CENTER)
+                        
+                        # Add cancel button
+                        cancel_btn = JButton("Cancel")
+                        cancel_btn.addActionListener(lambda e: self.cancel())
+                        
+                        btn_panel = JPanel(FlowLayout(FlowLayout.CENTER))
+                        btn_panel.setBackground(BACKGROUND_COLOR)
+                        btn_panel.add(cancel_btn)
+                        content_panel.add(btn_panel, BorderLayout.SOUTH)
+                        
+                        self.progress_dialog.add(content_panel)
+                        self.progress_dialog.setVisible(True)
+                    
+                    def cancel(self):
+                        self.cancelled = True
+                        self.progress_dialog.dispose()
+                        self.chat_panel.chatArea.setText(self.chat_panel.chatArea.getText().replace("[Loading...]", "[Cancelled]"))
                     
                     def doInBackground(self):
                         try:
+                            if self.cancelled:
+                                return "Request cancelled"
                             return self.extender.sendToAI(self.prompt)
                         except Exception as e:
                             return "Error: " + str(e)
                     
                     def done(self):
                         try:
-                            # Get the response
-                            response = self.get()
+                            # Close the dialog
+                            if self.progress_dialog.isVisible():
+                                self.progress_dialog.dispose()
                             
-                            # Update conversation history
-                            self.chat_panel.conversation_history.pop()  # Remove the User message
-                            self.chat_panel.conversation_history.append(("User", message))  # Add it back
-                            self.chat_panel.conversation_history.append(("Assistant", response))
-                            
-                            # Update display
-                            self.chat_panel.updateChatDisplay()
-                            
-                            # Save history
-                            self.chat_panel.history_manager.save_history(self.chat_panel.conversation_history)
+                            if not self.cancelled:
+                                # Get the response
+                                response = self.get()
+                                
+                                # Update conversation history
+                                self.chat_panel.conversation_history.pop()  # Remove the User message
+                                self.chat_panel.conversation_history.append(("User", message))  # Add it back
+                                self.chat_panel.conversation_history.append(("Assistant", response))
+                                
+                                # Update display
+                                self.chat_panel.updateChatDisplay()
+                                
+                                # Save history
+                                self.chat_panel.history_manager.save_history(self.chat_panel.conversation_history)
                         except Exception as e:
                             self.chat_panel.chatArea.setText("")
                             self.chat_panel.chatArea.append("Error: {}\n\n".format(str(e)))
@@ -437,6 +492,14 @@ class ChatPanel(BasePanel):
                 worker.execute()
                 
         except Exception as e:
+            # Restore cursor on error
+            root_frame = SwingUtilities.getWindowAncestor(self)
+            if root_frame:
+                root_frame.setCursor(Cursor.getDefaultCursor())
+            
+            self.setCursor(Cursor.getDefaultCursor())
+            self.chatArea.setCursor(Cursor.getDefaultCursor())
+            
             self.chatArea.append("Error: {}\n\n".format(str(e)))
             self.questionField.setEnabled(True)
 
@@ -933,6 +996,50 @@ class BurpAIMainPanel(JPanel):
         self.setMinimumSize(Dimension(800, 600))
         self.setPreferredSize(Dimension(1200, 800))
         
+        # Définir l'état d'analyse
+        self.analyzeInProgress = False
+        
+        # Ajouter une barre d'état en bas
+        self.statusBar = JPanel(BorderLayout(5, 0))
+        self.statusBar.setBorder(BorderFactory.createEmptyBorder(3, 5, 3, 5))
+        self.statusBar.setBackground(BACKGROUND_COLOR)
+        
+        # Créer un panneau à gauche pour le statut
+        leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0))
+        leftPanel.setBackground(BACKGROUND_COLOR)
+        
+        self.statusLabel = JLabel("Ready")
+        self.statusLabel.setForeground(TEXT_COLOR)
+        leftPanel.add(self.statusLabel)
+        
+        # Créer un indicateur de progression visuel
+        self.progressPanel = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0))
+        self.progressPanel.setBackground(Color.RED)
+        self.progressPanel.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5))
+        self.progressLabel = JLabel("ANALYSIS IN PROGRESS")
+        self.progressLabel.setForeground(Color.WHITE)
+        self.progressLabel.setFont(self.progressLabel.getFont().deriveFont(Font.BOLD))
+        self.progressPanel.add(self.progressLabel)
+        
+        # Créer un panneau à droite pour l'indicateur d'activité
+        rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0))
+        rightPanel.setBackground(BACKGROUND_COLOR)
+        
+        # Créer un indicateur d'activité dans la barre d'état
+        self.spinnerLabel = JLabel("◌")
+        self.spinnerLabel.setForeground(Color.GRAY)
+        self.spinnerLabel.setFont(Font("Segoe UI", Font.BOLD, 16))
+        rightPanel.add(self.spinnerLabel)
+        
+        # Ajouter les panneaux à la barre d'état
+        self.statusBar.add(leftPanel, BorderLayout.WEST)
+        self.statusBar.add(self.progressPanel, BorderLayout.CENTER)
+        self.statusBar.add(rightPanel, BorderLayout.EAST)
+        
+        # Cacher les indicateurs de progression initialement
+        self.progressPanel.setVisible(False)
+        self.spinnerLabel.setVisible(False)
+        
         # Initialiser les panneaux
         self.configPanel = APIConfigPanel(self.service)
         self.systemPromptPanel = SystemPromptPanel()
@@ -1020,6 +1127,7 @@ class BurpAIMainPanel(JPanel):
         self.add(centerPanel, BorderLayout.CENTER)
         self.add(self.rightSepPanel, BorderLayout.EAST)
         self.add(self.rightPanel, BorderLayout.EAST)
+        self.add(self.statusBar, BorderLayout.SOUTH)
         
         # Appliquer les styles globaux
         self.applyGlobalStyles(self)
@@ -1028,6 +1136,7 @@ class BurpAIMainPanel(JPanel):
         
         # Appliquer la configuration initiale de visibilité du chat
         self.applyVisibilityConfiguration()
+
     def applyGlobalStyles(self, component):
         """Applique les styles de manière récursive à tous les composants"""
         component.setBackground(BACKGROUND_COLOR)
@@ -1082,19 +1191,41 @@ class BurpAIMainPanel(JPanel):
 class ErrorHandler:
     @staticmethod
     def showError(parent, error, title="Error"):
-        if "timeout" in str(error).lower():
-            message = "The request timed out. Please check your internet connection or try again."
-        elif "api key" in str(error).lower():
+        error_str = str(error).lower()
+        
+        if "timed out" in error_str or "timeout" in error_str:
+            message = ("Request timed out. Suggestions:\n"
+                      "1. Increase the timeout in configuration\n"
+                      "2. Reduce the request/context size\n"
+                      "3. Check your internet connection")
+            icon = JOptionPane.WARNING_MESSAGE
+        elif "entity too large" in error_str or "413" in error_str:
+            message = ("Request too large. Suggestions:\n"
+                      "1. Reduce the size of your request\n"
+                      "2. Reduce the amount of context")
+            icon = JOptionPane.WARNING_MESSAGE
+        elif "api key" in error_str:
             message = "Invalid API key. Please check your configuration."
+            icon = JOptionPane.ERROR_MESSAGE
+        elif "response exceeded maximum size" in error_str:
+            message = ("API response was too large and has been truncated.\n"
+                      "Suggestions:\n"
+                      "1. Try reducing the size of your prompt\n"
+                      "2. Try formulating a more specific request")
+            icon = JOptionPane.WARNING_MESSAGE
         else:
             message = str(error)
+            icon = JOptionPane.ERROR_MESSAGE
         
         JOptionPane.showMessageDialog(
             parent,
             message,
             title,
-            JOptionPane.ERROR_MESSAGE
+            icon
         )
+        
+        # Return true if this is an error that can be retried
+        return "timed out" in error_str or "timeout" in error_str or "connection" in error_str
 
 class RequestGroupPanel(BasePanel):
     def __init__(self, request_manager):
@@ -1495,41 +1626,95 @@ class AnalysisWorker(SwingWorker):
         self.menu_factory = menu_factory
         self.worker_cancelled = [False]
         
-        # Create and add progress indicator
-        self.progress_panel = JPanel(BorderLayout())
-        self.progress_panel.setBackground(BACKGROUND_COLOR)
+        # Create a non-modal progress dialog
+        self.progress_dialog = JDialog(SwingUtilities.getWindowAncestor(self.response_area), "Analysis in Progress", False)
+        self.progress_dialog.setSize(400, 150)
+        self.progress_dialog.setLayout(BorderLayout())
+        self.progress_dialog.setLocationRelativeTo(None)  # Center on screen
         
-        # Create label
-        status_label = JLabel("Analysis in progress...", SwingConstants.CENTER)
-        status_label.setForeground(TEXT_COLOR)
-        self.progress_panel.add(status_label, BorderLayout.NORTH)
+        # Create progress panel
+        progress_panel = JPanel(BorderLayout())
+        progress_panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
+        progress_panel.setBackground(BACKGROUND_COLOR)
         
-        # Create progress bar
+        # Add header
+        header_label = JLabel("ANALYSIS IN PROGRESS", SwingConstants.CENTER)
+        header_label.setFont(header_label.getFont().deriveFont(Font.BOLD, 16))
+        header_label.setForeground(Color.RED)
+        progress_panel.add(header_label, BorderLayout.NORTH)
+        
+        # Add progress bar
         self.progress_bar = JProgressBar()
         self.progress_bar.setIndeterminate(True)
         self.progress_bar.setStringPainted(True)
-        self.progress_bar.setString("Waiting for API response...")
-        self.progress_bar.setBackground(BACKGROUND_COLOR)
-        self.progress_bar.setForeground(ACCENT_COLOR)
-        self.progress_panel.add(self.progress_bar, BorderLayout.CENTER)
+        self.progress_bar.setString("Processing request...")
+        progress_panel.add(self.progress_bar, BorderLayout.CENTER)
         
-        # Get the parent component of the response area
-        parent = self.response_area.getParent()
+        # Add info text
+        info_panel = JPanel()
+        info_panel.setLayout(BorderLayout())
+        info_panel.setBackground(BACKGROUND_COLOR)
         
-        # Save original component to restore later
-        self.original_component = parent.getViewport().getView()
+        info_label = JLabel("This may take some time depending on request size...")
+        info_label.setForeground(TEXT_COLOR)
+        info_panel.add(info_label, BorderLayout.NORTH)
         
-        # Replace with progress panel
-        parent.getViewport().setView(self.progress_panel)
+        # Add cancel button
+        cancel_button = JButton("Cancel Analysis")
+        cancel_button.addActionListener(lambda e: self.cancelAnalysis())
+        
+        button_panel = JPanel(FlowLayout(FlowLayout.CENTER))
+        button_panel.setBackground(BACKGROUND_COLOR)
+        button_panel.add(cancel_button)
+        info_panel.add(button_panel, BorderLayout.SOUTH)
+        
+        progress_panel.add(info_panel, BorderLayout.SOUTH)
+        
+        self.progress_dialog.add(progress_panel)
+        self.progress_dialog.setVisible(True)
+        
+        # Start the spinner animation
+        self.startProgressAnimation()
 
+    def startProgressAnimation(self):
+        """Start an animation on the progress bar text"""
+        class ProgressUpdater(Thread):
+            def __init__(self, worker):
+                Thread.__init__(self)
+                self.worker = worker
+                self.setDaemon(True)
+                
+            def run(self):
+                dots = ["", ".", "..", "..."]
+                index = 0
+                
+                while not self.worker.worker_cancelled[0] and self.worker.progress_dialog.isVisible():
+                    try:
+                        SwingUtilities.invokeLater(lambda i=index: 
+                            self.worker.progress_bar.setString("Processing request" + dots[i]))
+                        index = (index + 1) % len(dots)
+                        Thread.sleep(500)
+                    except:
+                        break
+        
+        updater = ProgressUpdater(self)
+        updater.start()
+
+    def cancelAnalysis(self):
+        """Cancel the analysis when user clicks cancel"""
+        self.worker_cancelled[0] = True
+        self.progress_dialog.dispose()
+        self.response_area.setText("Analysis cancelled by user")
+        
     def doInBackground(self):
         try:
             if self.worker_cancelled[0]:
                 return "Analysis cancelled by user"
-                
+            
             self.extender._callbacks.printOutput(
                 "Starting AI analysis (prompt length: {})".format(len(self.prompt))
             )
+            
             result = self.extender.service.analyze(self.prompt)
             self.extender._callbacks.printOutput("Analysis completed")
             return result
@@ -1540,17 +1725,75 @@ class AnalysisWorker(SwingWorker):
 
     def done(self):
         try:
-            # Restore original text area
-            parent = self.progress_panel.getParent()
-            if parent and hasattr(parent, 'setView'):
-                parent.setView(self.original_component)
-            elif parent and hasattr(parent, 'getViewport'):
-                parent.getViewport().setView(self.original_component)
+            # Close the progress dialog
+            if self.progress_dialog.isVisible():
+                self.progress_dialog.dispose()
             
             if not self.worker_cancelled[0]:
-                result = self.get()
-                self.response_area.setText(result)
-                self.response_area.setCaretPosition(0)
+                try:
+                    result = self.get()
+                    self.response_area.setText(result)
+                    self.response_area.setCaretPosition(0)
+                except Exception as e:
+                    error_message = str(e)
+                    self.response_area.setText("Error: " + error_message)
+                    
+                    # Check if this is a retryable error
+                    is_retry_error = ErrorHandler.showError(
+                        SwingUtilities.getWindowAncestor(self.response_area), 
+                        e, 
+                        "Analysis Error"
+                    )
+                    
+                    # If it's a timeout error, add a retry button
+                    if is_retry_error and hasattr(self.response_area, 'getParent'):
+                        parent_container = self.response_area.getParent()
+                        while parent_container and not isinstance(parent_container, JPanel):
+                            parent_container = parent_container.getParent()
+                        
+                        if parent_container:
+                            retry_button = JButton("Retry with longer timeout")
+                            styleButton(retry_button, ACCENT_COLOR, TEXT_COLOR)
+                            
+                            # Create a function to retry with a longer timeout
+                            def retry_with_longer_timeout(event):
+                                try:
+                                    # Temporarily increase the timeout
+                                    current_config = self.extender.service.config_manager.get_current_config()
+                                    original_timeout = current_config.get('timeout', 30)
+                                    new_timeout = original_timeout * 2  # Double the timeout
+                                    
+                                    current_config['timeout'] = new_timeout
+                                    self.extender.service.config_manager.save_config(current_config)
+                                    
+                                    # Retry the analysis
+                                    new_worker = AnalysisWorker(
+                                        self.extender, 
+                                        self.prompt, 
+                                        self.response_area, 
+                                        self.menu_factory
+                                    )
+                                    new_worker.execute()
+                                    
+                                    # Remove the retry button
+                                    parent_container.remove(retry_button)
+                                    parent_container.revalidate()
+                                    parent_container.repaint()
+                                    
+                                    # Information message
+                                    self.response_area.setText("Retrying analysis with timeout of " + 
+                                                           str(new_timeout) + " seconds...\n\n" +
+                                                           "The timeout has been temporarily increased.")
+                                    
+                                except Exception as retry_error:
+                                    self.extender._callbacks.printError("Error retrying analysis: " + str(retry_error))
+                            
+                            retry_button.addActionListener(retry_with_longer_timeout)
+                            
+                            # Add the button to the interface
+                            parent_container.add(retry_button, BorderLayout.NORTH)
+                            parent_container.revalidate()
+                            parent_container.repaint()
         except Exception as e:
             self.extender._callbacks.printError("Error displaying results: {}".format(str(e)))
             self.response_area.setText("Error: {}".format(str(e)))
