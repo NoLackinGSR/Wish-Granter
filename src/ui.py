@@ -138,12 +138,19 @@ class APIConfigPanel(BasePanel):
         constraints.gridy = 5
         inputPanel.add(self.debug_checkbox, constraints)
         
+        # Insecure HTTP requests checkbox
+        self.insecure_checkbox = JCheckBox("Allow Insecure HTTP Requests", self.config.get("allow_insecure", False))
+        self.insecure_checkbox.setForeground(TEXT_COLOR)
+        self.insecure_checkbox.setBackground(BACKGROUND_COLOR)
+        constraints.gridy = 6
+        inputPanel.add(self.insecure_checkbox, constraints)
+        
         # Show Chat checkbox
         self.show_chat_checkbox = JCheckBox("Show Chat Panel", self.config.get("show_chat", True))
         self.show_chat_checkbox.setForeground(TEXT_COLOR)
         self.show_chat_checkbox.setBackground(BACKGROUND_COLOR)
         self.show_chat_checkbox.addActionListener(self.toggleChatVisibility)
-        constraints.gridy = 6
+        constraints.gridy = 7
         inputPanel.add(self.show_chat_checkbox, constraints)
         
         # Boutons
@@ -216,6 +223,7 @@ class APIConfigPanel(BasePanel):
             "model": self.getModel(),
             "timeout": self.getTimeout(),
             "debug_mode": self.getDebugMode(),
+            "allow_insecure": self.getAllowInsecure(),
             "show_chat": self.show_chat_checkbox.isSelected()
         }
         
@@ -257,6 +265,7 @@ class APIConfigPanel(BasePanel):
         except:
             return 30
     def getDebugMode(self): return self.debug_checkbox.isSelected()
+    def getAllowInsecure(self): return self.insecure_checkbox.isSelected()
     def clearCache(self, event):
         """Vide le cache des réponses AI"""
         try:
@@ -285,6 +294,10 @@ class APIConfigPanel(BasePanel):
         self.api_url.setText(config.get('api_url', ''))
         self.api_key.setText(config.get('api_key', ''))
         self.model.setText(config.get('model', ''))
+        self.timeout.setText(str(config.get('timeout', 30)))
+        self.debug_checkbox.setSelected(config.get('debug_mode', False))
+        self.insecure_checkbox.setSelected(config.get('allow_insecure', False))
+        self.show_chat_checkbox.setSelected(config.get('show_chat', True))
 
 class ChatPanel(BasePanel):
     def __init__(self, service):

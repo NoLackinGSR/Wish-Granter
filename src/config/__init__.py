@@ -41,7 +41,8 @@ def load_config(config_path):
         'model': DEFAULT_MODEL,
         'timeout': DEFAULT_TIMEOUT,
         'system_prompt': DEFAULT_SYSTEM_PROMPT,
-        'detailed_prompt': DEFAULT_DETAILED_PROMPT
+        'detailed_prompt': DEFAULT_DETAILED_PROMPT,
+        'allow_insecure': False
     }
 
 def save_config(config_path, config):

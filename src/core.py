@@ -119,7 +119,24 @@ class WishGranterService:
                 )
                 requestObj.add_header("Authorization", "Bearer " + api_key)
                 
-                response = urllib2.urlopen(requestObj)
+                # Check if insecure HTTP requests are allowed
+                allow_insecure = config.get('allow_insecure', False)
+                
+                if allow_insecure:
+                    self.callbacks.printOutput("Warning: Using insecure HTTP requests (SSL verification disabled)")
+                    import ssl
+                    # Create a context with no certificate verification
+                    ctx = ssl.create_default_context()
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+                    
+                    # Create opener with custom SSL context
+                    opener = urllib2.build_opener(urllib2.HTTPSHandler(context=ctx))
+                    response = opener.open(requestObj)
+                else:
+                    # Use default opener with SSL verification
+                    response = urllib2.urlopen(requestObj)
+                
                 self.callbacks.printOutput("Connection established, starting to read response...")
                 
                 # Initialize buffer for complete response
@@ -226,7 +243,8 @@ class ConfigManager:
                     'model': DEFAULT_MODEL,
                     'timeout': DEFAULT_TIMEOUT,
                     'system_prompt': DEFAULT_SYSTEM_PROMPT,
-                    'detailed_prompt': DEFAULT_DETAILED_PROMPT
+                    'detailed_prompt': DEFAULT_DETAILED_PROMPT,
+                    'allow_insecure': False
                 }
             return self.config
         except Exception as e:
